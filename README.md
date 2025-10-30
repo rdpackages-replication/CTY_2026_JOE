@@ -12,7 +12,7 @@ https://rdpackages.github.io/replication
 
 - Dataset: [csv](spp.csv)
 
-- R implementation: [empirical application](CTY_2025_BDD-Distance--empapp.R) | [simulations](CTY_2025_BDD-Distance--simuls.R) | [post analysis](CTY_2025_BDD-Distance--post.R)
+- R implementation: [figure 1](CTY_2025_BDD-Location--Fig1.R) | [simulations](CTY_2025_BDD-Location--Simuls.R) | [post analysis](CTY_2025_BDD-Location--Simuls-Post.R)
 
 
 ## Reference
