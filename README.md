@@ -13,8 +13,8 @@ https://rdpackages.github.io/replication
 
 ## Reference
 
-- Cattaneo, Titiunik and Yu (2025): [Estimation and Inference in Boundary Discontinuity Designs: Distance-Based Methods](https://rdpackages.github.io/references/Cattaneo-Titiunik-Yu_2025_BDD-Distance.pdf).<br>
-Working paper.<br>
-[Supplemental Appendix](https://rdpackages.github.io/references/Cattaneo-Titiunik-Yu_2025_BDD-Distance--Supplement.pdf).
+- Cattaneo, Titiunik and Yu (2025): [Estimation and Inference in Boundary Discontinuity Designs: Distance-Based Methods](https://rdpackages.github.io/references/Cattaneo-Titiunik-Yu_2026_JOE.pdf).<br>
+_Journal of Econometrics_, revise and resubmit.<br>
+[Supplemental Appendix](https://rdpackages.github.io/references/Cattaneo-Titiunik-Yu_2026_JOE--Supplement.pdf).
 
 <br><br>
