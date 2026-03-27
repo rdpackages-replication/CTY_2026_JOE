@@ -121,7 +121,7 @@ dgp_grid <- expand.grid(
 
 # write into tables
 
-dir.create("tables", showWarnings = FALSE)
+dir.create("Results", showWarnings = FALSE)
 
 fmt <- function(x) {
   if (is.na(x) || abs(x) < 1e-12) return("$0$")
@@ -169,7 +169,7 @@ for (i in seq_along(rows)) {
 }
 
 lines <- c(lines, "\\hline\\hline", "\\end{tabular}")
-writeLines(lines, "tables/dgp-mean.tex")
+writeLines(lines, "Results/dgp-mean.tex")
 
 
 # ---------- variance table ----------
@@ -200,7 +200,7 @@ for (i in seq_along(rows)) {
 }
 
 lines <- c(lines, "\\hline\\hline", "\\end{tabular}")
-writeLines(lines, "tables/dgp-var.tex")
+writeLines(lines, "Results/dgp-var.tex")
 
 m <- 2000
 
@@ -297,16 +297,16 @@ system.time({
       tag <- paste0(mean_type_now, "_", var_type_now)
       
       write.csv(out.kinkoff,
-                file = sprintf("simuls/kinkoff_sim%d_DGP%d_%s.csv", j, DGP, tag),
+                file = sprintf("monte_variants_outputs/kinkoff_sim%d_DGP%d_%s.csv", j, DGP, tag),
                 row.names = FALSE)
       write.csv(out.kinkon,
-                file = sprintf("simuls/kinkon_sim%d_DGP%d_%s.csv", j, DGP, tag),
+                file = sprintf("monte_variants_outputs/kinkon_sim%d_DGP%d_%s.csv", j, DGP, tag),
                 row.names = FALSE)
       write.csv(out.adaptive,
-                file = sprintf("simuls/adaptive_sim%d_DGP%d_%s.csv", j, DGP, tag),
+                file = sprintf("monte_variants_outputs/adaptive_sim%d_DGP%d_%s.csv", j, DGP, tag),
                 row.names = FALSE)
       write.csv(out.rdrobust,
-                file = sprintf("simuls/rdrobustadj_sim%d_DGP%d_%s.csv", j, DGP, tag),
+                file = sprintf("monte_variants_outputs/rdrobustadj_sim%d_DGP%d_%s.csv", j, DGP, tag),
                 row.names = FALSE)
     }
   }

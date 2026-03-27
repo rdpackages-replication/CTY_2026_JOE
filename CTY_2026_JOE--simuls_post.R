@@ -153,7 +153,7 @@ for (g in 1:nrow(dgp_grid)) {
     for (i in 1:m) {
       
       file_now <- sprintf(
-        "simuls/%s_sim%d_DGP%d_%s.csv",
+        "monte_variants_outputs/%s_sim%d_DGP%d_%s.csv",
         method, i, DGP, tag
       )
       
@@ -243,11 +243,11 @@ for (g in 1:nrow(dgp_grid)) {
   bands_all[[tag]]   <- bands
 }
 
-########################################################
-# Save 16 LaTeX tabulars: one for each DGP × method
-########################################################
+################################################################################
+### Table 2-5: Simulation Results
+################################################################################
 
-dir.create("tables", showWarnings = FALSE)
+dir.create("Results", showWarnings = FALSE)
 
 methods <- c("kinkoff", "kinkon", "adaptive", "rdrobustadj")
 method_names <- c(
@@ -313,14 +313,22 @@ for (g in 1:nrow(dgp_grid)) {
       "\\end{tabular}"
     )
     
-    file_name <- sprintf("tables/tab-simuls_%s_%s.tex", tag, method)
+    file_name <- sprintf("tables/table_%s_%s.tex", tag, method)
     writeLines(lines, file_name)
   }
 }
 
-##################### Plot: Bias Figure for Each DGP #####################
+################################################################################
+### FIGURE 3: Bias Plots
+################################################################################
 
-dir.create("figures", showWarnings = FALSE)
+show_idx <- c(1, 4, 7, 10, 12, 14, 17, 20)
+
+kink_index <- 12
+kink_x_text <- 11
+kink_y <- 0.31
+
+dir.create("Results", showWarnings = FALSE)
 
 methods_plot <- c("kinkoff", "adaptive", "kinkon", "rdrobustadj")
 
@@ -441,6 +449,22 @@ for (g in 1:nrow(dgp_grid)) {
     coord_cartesian(ylim = c(0.31, 0.41)) +
     xlab("Cutoffs on the Boundary") +
     ylab("Treatment Effect") 
+  
+  temp_plot <- temp_plot +
+    scale_x_continuous(
+      breaks = show_idx,
+      labels = TeX(paste0("$\\textbf{b}_{", show_idx, "}$"))
+    )
+  
+  
+  temp_plot <- temp_plot +
+    geom_vline(
+      xintercept = kink_index,
+      color = "lightgrey",
+      size = 1,
+      linetype = "dotted"
+    )
+
   
   print(temp_plot)
   
