@@ -42,7 +42,7 @@ for (i in (ceiling(neval * 0.5)+1): neval){
 eval <- data.frame(eval)
 colnames(eval) <- c("x.1", "x.2")
 
-eval <- eval[c(10:30),]
+eval <- eval[c(11:31),]
 neval <- nrow(eval)
 subset <- c(1:neval)
 neval_subset <- neval
@@ -313,7 +313,7 @@ for (g in 1:nrow(dgp_grid)) {
       "\\end{tabular}"
     )
     
-    file_name <- sprintf("tables/table_%s_%s.tex", tag, method)
+    file_name <- sprintf("tables/tab-simuls_%s_%s.tex", tag, method)
     writeLines(lines, file_name)
   }
 }
@@ -322,9 +322,9 @@ for (g in 1:nrow(dgp_grid)) {
 ### FIGURE 3: Bias Plots
 ################################################################################
 
-show_idx <- c(1, 4, 7, 10, 12, 14, 17, 20)
+show_idx <- c(1, 4, 7, 11, 14, 17, 21)
 
-kink_index <- 12
+kink_index <- 11
 kink_x_text <- 11
 kink_y <- 0.31
 
@@ -399,7 +399,7 @@ for (g in 1:nrow(dgp_grid)) {
       axis.title.x = element_text(size = 15, face = "bold"),
       axis.title.y = element_text(size = 15, face = "bold"),
       plot.title   = element_text(size = 20, hjust = 0.5),
-      text         = element_text(family = "Times New Roman", face = "bold"),
+      text         = element_text(family = "serif", face = "bold"),
       axis.text.x  = element_text(face = "bold", size = 15),
       axis.text.y  = element_text(face = "bold", size = 12),
       legend.position = c(0.76, 1),

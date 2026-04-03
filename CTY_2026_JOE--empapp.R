@@ -1,8 +1,6 @@
-################################################################################################
-# Estimation and Inference in Boundary Discontinuity Designs: Distance-Based Methods
-# Empirical Application
+
+# rd2d: illustration file
 # Authors: M. D. Cattaneo, R. Titiunik, R. R. Yu
-################################################################################################
 
 rm(list=ls(all=TRUE))
 
@@ -38,8 +36,8 @@ for (i in (ceiling(neval * 0.5)+1): neval){
 eval <- data.frame(eval)
 colnames(eval) <- c("x.1", "x.2")
 
-# subsetting
-eval <- eval[c(10:30),]
+# subsetting so the kink (0, 0) is the 11th retained boundary point
+eval <- eval[c(11:31),]
 neval <- 21
 
 dist_to_kink <- rep(0, neval)
@@ -76,13 +74,13 @@ point_1 <- eval[1,]
 x_1 <- point_1$x.1
 y_1 <- point_1$x.2
 
-# point_12 <- eval[12,]
-# x_12 <- point_12$x.1
-# y_12 <- point_12$x.2
+# point_11 <- eval[11,]
+# x_11 <- point_11$x.1
+# y_11 <- point_11$x.2
 
-point_12 <- eval[12,]
-x_12 <- point_12$x.1
-y_12 <- point_12$x.2
+point_11 <- eval[11,]
+x_11 <- point_11$x.1
+y_11 <- point_11$x.2
 
 point_21 <- eval[21,]
 x_21 <- point_21$x.1
@@ -138,7 +136,7 @@ for(i in seq_len(nrow(annotation_data))) {
 
 # Arrow pointing to point 21
 p1.1 <- p1.1 +  geom_segment(
-  aes(x = x_12 - 8, y = y_12 - 8, xend = x_12, yend = y_12),
+  aes(x = x_11 - 8, y = y_11 - 8, xend = x_11, yend = y_11),
   arrow = arrow(length = unit(0.2, "cm")),
   color = "black",
   size = 1
@@ -147,9 +145,9 @@ p1.1 <- p1.1 +  geom_segment(
   # Label next to the arrow
   annotate(
     "text",
-    x = x_12 - 10,
-    y = y_12 - 12,
-    label = TeX("$\\textbf{b}_{12}$"),
+    x = x_11 - 10,
+    y = y_11 - 12,
+    label = TeX("$\\textbf{b}_{11}$"),
     color = "black",
     size = 6,
     fontface = "bold"
@@ -172,7 +170,7 @@ p1.1 <- p1.1 +  geom_segment(
     axis.title.x = element_text(size = 15),
     axis.title.y = element_text(size = 15),
     plot.title   = element_text(size = 20, hjust = 0.5),
-    text = element_text(family="Times New Roman", face="bold"),
+    text = element_text(family = "serif", face = "bold"),
     axis.text.x  = element_text(face = "bold", size = 12),
     axis.text.y  = element_text(face = "bold", size = 12),
     panel.grid.major = element_blank(),
@@ -353,7 +351,7 @@ for (nm in names(out_list)) {
     "\\end{tabular}"
   )
   
-  writeLines(lines, sprintf("tables/emp_app_%s.tex", nm))
+  writeLines(lines, sprintf("tables/tab-empapp_%s.tex", nm))
 }
 
 ################################################################################
@@ -475,7 +473,7 @@ plot_rd2d_method <- function(out,
       axis.title.x = element_text(size = 15, face = "bold"),
       axis.title.y = element_text(size = 15, face = "bold"),
       plot.title   = element_text(size = 20, hjust = 0.5),
-      text         = element_text(family = "Times New Roman", face = "bold"),
+      text         = element_text(family = "serif", face = "bold"),
       axis.text.x  = element_text(face = "bold", size = 15),
       axis.text.y  = element_text(face = "bold", size = 12),
       legend.position = c(0.8, 1),
@@ -505,13 +503,13 @@ plot_rd2d_method <- function(out,
 
 ################################## Produce Four Plots ##################################
 
-show_idx <- c(1, 4, 7, 10, 12, 14, 17, 20)
+show_idx <- c(1, 4, 7, 11, 14, 17, 21)
 
 p_smooth <- plot_rd2d_method(
   out = out.kinkoff,
   method_name = "Smooth Boundary",
   show_idx = show_idx,
-  kink_index = 12,
+  kink_index = 11,
   kink_x_text = 11,
   kink_y = -0.3,
   ylim = c(-0.3, 0.8),
@@ -522,7 +520,7 @@ p_adaptive <- plot_rd2d_method(
   out = out.adaptive,
   method_name = "Adaptive",
   show_idx = show_idx,
-  kink_index = 12,
+  kink_index = 11,
   kink_x_text = 11,
   kink_y = -0.3,
   ylim = c(-0.3, 0.8),
@@ -533,7 +531,7 @@ p_kinkon <- plot_rd2d_method(
   out = out.kinkon,
   method_name = "Unknown Kink Location",
   show_idx = show_idx,
-  kink_index = 12,
+  kink_index = 11,
   kink_x_text = 11,
   kink_y = -0.3,
   ylim = c(-0.3, 0.8),
@@ -544,7 +542,7 @@ p_rdrobust <- plot_rd2d_method(
   out = out.rdrobust,
   method_name = "Rdrobust",
   show_idx = show_idx,
-  kink_index = 12,
+  kink_index = 11,
   kink_x_text = 11,
   kink_y = -0.3,
   ylim = c(-0.3, 0.8),
@@ -556,7 +554,7 @@ p_rdrobust <- plot_rd2d_method(
 ################################################################################
 
 for (element in c(1:3)){
-  idx <- c(1,12,21)[element]
+  idx <- c(1,11,21)[element]
 
   h <- result.kinkoff$results$h0[idx]
   hnumber <- idx
@@ -637,7 +635,7 @@ for (element in c(1:3)){
       axis.title.x = element_text(size = 15),
       axis.title.y = element_text(size = 15),
       plot.title   = element_text(size = 20, hjust = 0.5),
-      text         = element_text(family = "Times New Roman", face = "bold"),
+      text         = element_text(family = "serif", face = "bold"),
       axis.text.x  = element_text(face = "bold", size = 12),
       axis.text.y  = element_text(face = "bold", size = 12),
       panel.grid.major = element_blank(),
@@ -656,5 +654,3 @@ for (element in c(1:3)){
     width = 6, height = 5
   )
 }
-
-

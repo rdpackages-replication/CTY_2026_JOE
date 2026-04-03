@@ -1,9 +1,3 @@
-################################################################################################
-# Estimation and Inference in Boundary Discontinuity Designs: Distance-Based Methods
-# Simulations
-# Authors: M. D. Cattaneo, R. Titiunik, R. R. Yu
-################################################################################################
-
 rm(list=ls(all=TRUE))
 
 library(MASS)
@@ -43,8 +37,8 @@ for (i in (ceiling(neval * 0.5)+1): neval){
 eval <- data.frame(eval)
 colnames(eval) <- c("x.1", "x.2")
 
-# subsetting eval
-eval <- eval[c(10:30),]
+# subsetting eval so the kink (0, 0) is the 11th retained boundary point
+eval <- eval[c(11:31),]
 neval <- 21
 
 dist_to_kink <- rep(0, neval)
@@ -122,6 +116,8 @@ dgp_grid <- expand.grid(
 # write into tables
 
 dir.create("Results", showWarnings = FALSE)
+output_dir <- "monte_variants_outputs"
+dir.create(output_dir, showWarnings = FALSE)
 
 fmt <- function(x) {
   if (is.na(x) || abs(x) < 1e-12) return("$0$")
@@ -169,7 +165,7 @@ for (i in seq_along(rows)) {
 }
 
 lines <- c(lines, "\\hline\\hline", "\\end{tabular}")
-writeLines(lines, "Results/dgp-mean.tex")
+writeLines(lines, "tables/dgp-mean.tex")
 
 
 # ---------- variance table ----------
@@ -200,7 +196,7 @@ for (i in seq_along(rows)) {
 }
 
 lines <- c(lines, "\\hline\\hline", "\\end{tabular}")
-writeLines(lines, "Results/dgp-var.tex")
+writeLines(lines, "tables/dgp-var.tex")
 
 m <- 2000
 
@@ -213,9 +209,17 @@ n <- 20 * 20 * 25 * 2
 
 #################### Polynomial / Variance Fits to the Data ####################
 
-num_cores <- parallel::detectCores() - 1
-cl <- makeCluster(num_cores - 3)
-registerDoParallel(cl)  # Register parallel backend
+num_cores <- parallel::detectCores()
+if (is.na(num_cores)) num_cores <- 2
+num_workers <- max(1, num_cores - 4)
+cl <- tryCatch(makeCluster(num_workers), error = function(e) NULL)
+if (is.null(cl)) {
+  message("Parallel backend unavailable; running sequentially.")
+  registerDoSEQ()
+} else {
+  message(sprintf("Running in parallel with %d worker(s).", num_workers))
+  registerDoParallel(cl)  # Register parallel backend
+}
 
 system.time({
   foreach(
@@ -297,19 +301,19 @@ system.time({
       tag <- paste0(mean_type_now, "_", var_type_now)
       
       write.csv(out.kinkoff,
-                file = sprintf("monte_variants_outputs/kinkoff_sim%d_DGP%d_%s.csv", j, DGP, tag),
+                file = sprintf("%s/kinkoff_sim%d_DGP%d_%s.csv", output_dir, j, DGP, tag),
                 row.names = FALSE)
       write.csv(out.kinkon,
-                file = sprintf("monte_variants_outputs/kinkon_sim%d_DGP%d_%s.csv", j, DGP, tag),
+                file = sprintf("%s/kinkon_sim%d_DGP%d_%s.csv", output_dir, j, DGP, tag),
                 row.names = FALSE)
       write.csv(out.adaptive,
-                file = sprintf("monte_variants_outputs/adaptive_sim%d_DGP%d_%s.csv", j, DGP, tag),
+                file = sprintf("%s/adaptive_sim%d_DGP%d_%s.csv", output_dir, j, DGP, tag),
                 row.names = FALSE)
       write.csv(out.rdrobust,
-                file = sprintf("monte_variants_outputs/rdrobustadj_sim%d_DGP%d_%s.csv", j, DGP, tag),
+                file = sprintf("%s/rdrobustadj_sim%d_DGP%d_%s.csv", output_dir, j, DGP, tag),
                 row.names = FALSE)
     }
   }
 })
 
-on.exit(stopCluster(cl), add = TRUE)
+if (!is.null(cl)) on.exit(stopCluster(cl), add = TRUE)

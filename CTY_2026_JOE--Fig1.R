@@ -1,9 +1,3 @@
-################################################################################################
-# Estimation and Inference in Boundary Discontinuity Designs: Distance-Based Methods
-# Figure 1
-# Authors: M. D. Cattaneo, R. Titiunik, R. R. Yu
-################################################################################################
-
 library(ggplot2)
 library(latex2exp)
 library(extrafont)
