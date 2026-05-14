@@ -71,18 +71,24 @@ read_raw_file <- function(file) {
 }
 
 read_simulation_rows <- function(m, dgp, design, method, tag, suffix, specs) {
-  files <- file.path(output_dir, sprintf("simuls_raw_rep%04d_dgp%02d_%s_%s_%s_%s.csv", seq_len(m), dgp, design, method, tag, suffix))
-  missing_files <- files[!file.exists(files)]
-  if (length(missing_files)) stop(sprintf("Missing simulation file: %s", missing_files[1]), call. = FALSE)
-  rows <- do.call(rbind, lapply(files, read_raw_file))
+  file <- file.path(output_dir, sprintf("simuls_raw_dgp%02d_%s_%s_%s_%s.csv", dgp, design, method, tag, suffix))
+  rows <- read_raw_file(file)
   expected_rows <- nrow(specs) * (21 + 2)
-  rows_by_file <- table(rows$replication)
+  observed_reps <- sort(unique(as.integer(rows$replication)))
+  if (!identical(observed_reps, seq_len(m))) {
+    stop(sprintf("File %s does not contain exactly replications 1 through %d.", file, m), call. = FALSE)
+  }
+  rows_by_file <- table(factor(rows$replication, levels = seq_len(m)))
   if (any(rows_by_file != expected_rows)) {
     bad <- names(rows_by_file)[rows_by_file != expected_rows][1]
     stop(sprintf("Replication %s has %d rows; expected %d.", bad, rows_by_file[[bad]], expected_rows), call. = FALSE)
   }
-  if (!all(rows$design == design)) stop(sprintf("File %s contains the wrong design.", files[1]), call. = FALSE)
-  if (!setequal(unique(rows$estimand), specs$estimand)) stop(sprintf("File %s contains the wrong estimands.", files[1]), call. = FALSE)
+  if (!all(rows$dgp == dgp)) stop(sprintf("File %s contains the wrong DGP.", file), call. = FALSE)
+  if (!all(rows$design == design)) stop(sprintf("File %s contains the wrong design.", file), call. = FALSE)
+  if (!all(rows$method == method)) stop(sprintf("File %s contains the wrong method.", file), call. = FALSE)
+  if (!all(rows$tag == tag)) stop(sprintf("File %s contains the wrong tag.", file), call. = FALSE)
+  if (!all(rows$suffix == suffix)) stop(sprintf("File %s contains the wrong bandwidth suffix.", file), call. = FALSE)
+  if (!setequal(unique(rows$estimand), specs$estimand)) stop(sprintf("File %s contains the wrong estimands.", file), call. = FALSE)
   rows
 }
 

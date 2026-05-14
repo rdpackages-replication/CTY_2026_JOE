@@ -59,13 +59,13 @@ read_raw_file <- function(file) {
 }
 
 read_simulation_rows <- function(m, dgp, method, tag) {
-  files <- file.path(
-    output_dir,
-    sprintf("simuls_raw_rep%04d_dgp%02d_sharp_%s_%s_bwmain.csv", seq_len(m), dgp, method, tag)
-  )
-  missing_files <- files[!file.exists(files)]
-  if (length(missing_files)) stop(sprintf("Missing simulation file: %s", missing_files[1]), call. = FALSE)
-  do.call(rbind, lapply(files, read_raw_file))
+  file <- file.path(output_dir, sprintf("simuls_raw_dgp%02d_sharp_%s_%s_bwmain.csv", dgp, method, tag))
+  rows <- read_raw_file(file)
+  reps <- sort(unique(as.integer(rows$replication)))
+  if (!identical(reps, seq_len(m))) {
+    stop(sprintf("File %s does not contain exactly replications 1 through %d.", file, m), call. = FALSE)
+  }
+  rows
 }
 
 open_png <- function(file, width, height, units = "in", res = 300) {

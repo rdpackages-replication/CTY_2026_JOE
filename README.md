@@ -108,7 +108,8 @@ RD2D_M=1 RD2D_N=3000 RD2D_REPP=49 RD2D_WORKERS=1 Rscript CTY_2026_JOE--simuls.R
 - `output/empapp_*.csv`: empirical application data and summary tables.
 - `output/simuls_*.csv`: simulation metadata, DGP calibration, targets, and run
   summaries.
-- `output/simuls_raw_rep*.csv`: raw replication-level simulation files.
+- `output/simuls_raw_dgp*.csv`: raw simulation files stacked by DGP, design,
+  method, and bandwidth rule.
 - `tables/empapp_*.tex`: empirical application LaTeX table fragments.
 - `tables/simuls_*.tex`: simulation LaTeX table fragments.
 - `figures/*.png`: generated empirical application and simulation figures.

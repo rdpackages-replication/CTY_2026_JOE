@@ -480,13 +480,15 @@ make_output_rows <- function(result, design, method, replication, dgp, tag, bwpa
   do.call(rbind, pieces)
 }
 
+raw_result_columns <- c(
+  "replication", "dgp", "tag", "method", "bwparam", "suffix", "design", "estimand", "row",
+  "h0", "h1", "h0.rbc", "h1.rbc", "estimate.p", "std.err.p",
+  "estimate.q", "std.err.q", "t.value", "p.value", "ci.lower", "ci.upper",
+  "cb.lower", "cb.upper", "N.Co", "N.Tr"
+)
+
 validate_simulation_rows <- function(x, design, method, replication, dgp, tag, bwparam, suffix, specs) {
-  expected <- c(
-    "replication", "dgp", "tag", "method", "bwparam", "suffix", "design", "estimand", "row",
-    "h0", "h1", "h0.rbc", "h1.rbc", "estimate.p", "std.err.p",
-    "estimate.q", "std.err.q", "t.value", "p.value", "ci.lower", "ci.upper",
-    "cb.lower", "cb.upper", "N.Co", "N.Tr"
-  )
+  expected <- raw_result_columns
   missing <- setdiff(expected, names(x))
   if (length(missing)) stop("Missing columns for ", method, ": ", paste(missing, collapse = ", "))
   if (!all(x$replication == replication)) stop("Replication metadata mismatch for ", method)
@@ -512,15 +514,104 @@ validate_simulation_rows <- function(x, design, method, replication, dgp, tag, b
   invisible(TRUE)
 }
 
-raw_result_file <- function(replication, dgp, design, method, tag, suffix) {
-  file.path(output_dir, sprintf("simuls_raw_rep%04d_dgp%02d_%s_%s_%s_%s.csv", replication, dgp, design, method, tag, suffix))
+raw_replication_file <- function(replication) {
+  file.path(output_dir, sprintf("simuls_raw_rep%04d.csv", replication))
 }
 
-write_raw_result <- function(result, design, method, replication, dgp, tag, bwparam, suffix, specs) {
+raw_result_file <- function(dgp, design, method, tag, suffix) {
+  file.path(output_dir, sprintf("simuls_raw_dgp%02d_%s_%s_%s_%s.csv", as.integer(dgp), design, method, tag, suffix))
+}
+
+raw_result_key <- function(dgp, design, method, tag, suffix) {
+  paste(as.integer(dgp), design, method, tag, suffix, sep = "\t")
+}
+
+raw_result_rows <- function(result, design, method, replication, dgp, tag, bwparam, suffix, specs) {
   rows <- make_output_rows(result, design, method, replication, dgp, tag, bwparam, suffix, specs)
   validate_simulation_rows(rows, design, method, replication, dgp, tag, bwparam, suffix, specs)
-  file <- raw_result_file(replication, dgp, design, method, tag, suffix)
-  write_output(rows, file)
+  rows[, raw_result_columns]
+}
+
+make_raw_result_specs <- function() {
+  methods <- c("kinkoff", "kinkon", "adaptive", "rdrobustadj")
+
+  fuzzy <- do.call(rbind, lapply(fuzzy_calibrations, function(cal) {
+    expand.grid(
+      dgp = cal$dgp,
+      design = cal$design,
+      method = methods,
+      tag = cal$tag,
+      suffix = bandwidth_specs$suffix,
+      stringsAsFactors = FALSE
+    )
+  }))
+
+  sharp <- do.call(rbind, lapply(sharp_calibrations, function(cal) {
+    expand.grid(
+      dgp = cal$dgp,
+      design = cal$design,
+      method = methods,
+      tag = cal$tag,
+      suffix = "bwmain",
+      stringsAsFactors = FALSE
+    )
+  }))
+
+  unique(rbind(fuzzy, sharp))
+}
+
+close_raw_connections <- function(connections) {
+  for (con in connections) {
+    try(if (isOpen(con)) close(con), silent = TRUE)
+  }
+}
+
+consolidate_raw_results <- function(replication_files, raw_specs) {
+  final_files <- raw_result_file(raw_specs$dgp, raw_specs$design, raw_specs$method, raw_specs$tag, raw_specs$suffix)
+  if (length(final_files)) invisible(file.remove(final_files[file.exists(final_files)]))
+
+  keys <- raw_result_key(raw_specs$dgp, raw_specs$design, raw_specs$method, raw_specs$tag, raw_specs$suffix)
+  connections <- setNames(lapply(final_files, file, open = "wt"), keys)
+  on.exit(close_raw_connections(connections), add = TRUE)
+
+  written <- setNames(rep(FALSE, length(keys)), keys)
+
+  for (file in replication_files) {
+    raw <- read.csv(file, stringsAsFactors = FALSE, check.names = FALSE)
+    missing <- setdiff(raw_result_columns, names(raw))
+    if (length(missing)) {
+      stop(sprintf("Scratch simulation file %s is missing columns: %s", file, paste(missing, collapse = ", ")), call. = FALSE)
+    }
+    raw <- raw[, raw_result_columns]
+
+    row_keys <- raw_result_key(raw$dgp, raw$design, raw$method, raw$tag, raw$suffix)
+    parts <- split(raw, row_keys, drop = TRUE)
+
+    for (key in names(parts)) {
+      if (!(key %in% names(connections))) {
+        stop(sprintf("Unexpected simulation output cell in %s: %s", file, key), call. = FALSE)
+      }
+      utils::write.table(
+        parts[[key]],
+        file = connections[[key]],
+        sep = ",",
+        row.names = FALSE,
+        col.names = !written[[key]],
+        na = "",
+        qmethod = "double"
+      )
+      written[[key]] <- TRUE
+    }
+  }
+
+  missing_cells <- names(written)[!written]
+  if (length(missing_cells)) {
+    stop(sprintf("No rows were written for expected simulation cell: %s", missing_cells[1]), call. = FALSE)
+  }
+
+  close_raw_connections(connections)
+  invisible(file.remove(replication_files))
+  invisible(final_files)
 }
 
 ## Metadata
@@ -561,6 +652,7 @@ sim_status <- foreach(
   .packages = c("rdrobust")
 ) %dopar% {
   status <- data.frame(replication = integer(), design = character(), dgp = integer(), tag = character(), suffix = character(), stringsAsFactors = FALSE)
+  raw_rows <- list()
 
   for (g in seq_along(fuzzy_calibrations)) {
     cal <- fuzzy_calibrations[[g]]
@@ -580,10 +672,10 @@ sim_status <- foreach(
       h.rdrobust <- compute_rdrobust_bws(sim$y, sim$fuzzy, distance, bwparam)
       result.rdrobust <- rd2d.distance(sim$y, distance = distance, b = boundary, fuzzy = sim$fuzzy, h = h.rdrobust, bwparam = bwparam, repp = repp, vce = "hc1", params.cov = cov_targets)
 
-      write_raw_result(result.kinkoff, cal$design, "kinkoff", j, cal$dgp, tag, bwparam, suffix, fuzzy_estimand_specs)
-      write_raw_result(result.kinkon, cal$design, "kinkon", j, cal$dgp, tag, bwparam, suffix, fuzzy_estimand_specs)
-      write_raw_result(result.adaptive, cal$design, "adaptive", j, cal$dgp, tag, bwparam, suffix, fuzzy_estimand_specs)
-      write_raw_result(result.rdrobust, cal$design, "rdrobustadj", j, cal$dgp, tag, bwparam, suffix, fuzzy_estimand_specs)
+      raw_rows[[length(raw_rows) + 1L]] <- raw_result_rows(result.kinkoff, cal$design, "kinkoff", j, cal$dgp, tag, bwparam, suffix, fuzzy_estimand_specs)
+      raw_rows[[length(raw_rows) + 1L]] <- raw_result_rows(result.kinkon, cal$design, "kinkon", j, cal$dgp, tag, bwparam, suffix, fuzzy_estimand_specs)
+      raw_rows[[length(raw_rows) + 1L]] <- raw_result_rows(result.adaptive, cal$design, "adaptive", j, cal$dgp, tag, bwparam, suffix, fuzzy_estimand_specs)
+      raw_rows[[length(raw_rows) + 1L]] <- raw_result_rows(result.rdrobust, cal$design, "rdrobustadj", j, cal$dgp, tag, bwparam, suffix, fuzzy_estimand_specs)
 
       status <- rbind(status, data.frame(replication = j, design = cal$design, dgp = cal$dgp, tag = tag, suffix = suffix, stringsAsFactors = FALSE))
     }
@@ -605,14 +697,15 @@ sim_status <- foreach(
     h.rdrobust <- compute_rdrobust_bws(sim$y, distance = distance)
     result.rdrobust <- rd2d.distance(sim$y, distance = distance, b = boundary, h = h.rdrobust, params.other = "main.0", params.cov = cov_targets, repp = repp, vce = "hc1")
 
-    write_raw_result(result.kinkoff, cal$design, "kinkoff", j, cal$dgp, tag, bwparam, suffix, sharp_estimand_specs)
-    write_raw_result(result.kinkon, cal$design, "kinkon", j, cal$dgp, tag, bwparam, suffix, sharp_estimand_specs)
-    write_raw_result(result.adaptive, cal$design, "adaptive", j, cal$dgp, tag, bwparam, suffix, sharp_estimand_specs)
-    write_raw_result(result.rdrobust, cal$design, "rdrobustadj", j, cal$dgp, tag, bwparam, suffix, sharp_estimand_specs)
+    raw_rows[[length(raw_rows) + 1L]] <- raw_result_rows(result.kinkoff, cal$design, "kinkoff", j, cal$dgp, tag, bwparam, suffix, sharp_estimand_specs)
+    raw_rows[[length(raw_rows) + 1L]] <- raw_result_rows(result.kinkon, cal$design, "kinkon", j, cal$dgp, tag, bwparam, suffix, sharp_estimand_specs)
+    raw_rows[[length(raw_rows) + 1L]] <- raw_result_rows(result.adaptive, cal$design, "adaptive", j, cal$dgp, tag, bwparam, suffix, sharp_estimand_specs)
+    raw_rows[[length(raw_rows) + 1L]] <- raw_result_rows(result.rdrobust, cal$design, "rdrobustadj", j, cal$dgp, tag, bwparam, suffix, sharp_estimand_specs)
 
     status <- rbind(status, data.frame(replication = j, design = cal$design, dgp = cal$dgp, tag = tag, suffix = suffix, stringsAsFactors = FALSE))
   }
 
+  write_output(do.call(rbind, raw_rows), raw_replication_file(j))
   status
 }
 
@@ -623,18 +716,17 @@ elapsed <- difftime(Sys.time(), start_time, units = "mins")
 message(sprintf("Simulation outputs completed in %.2f minutes", as.numeric(elapsed)))
 write_output(sim_status, file.path(output_dir, "simuls_status.csv"))
 
-expected_raw <- c(unlist(lapply(fuzzy_calibrations, function(cal) {
-  unlist(lapply(bandwidth_specs$suffix, function(suffix) {
-    unlist(lapply(c("kinkoff", "kinkon", "adaptive", "rdrobustadj"), function(method) {
-      basename(raw_result_file(seq_len(m), cal$dgp, cal$design, method, cal$tag, suffix))
-    }), use.names = FALSE)
-  }), use.names = FALSE)
-}), use.names = FALSE), unlist(lapply(sharp_calibrations, function(cal) {
-  unlist(lapply(c("kinkoff", "kinkon", "adaptive", "rdrobustadj"), function(method) {
-    basename(raw_result_file(seq_len(m), cal$dgp, cal$design, method, cal$tag, "bwmain"))
-  }), use.names = FALSE)
-}), use.names = FALSE)
-)
+replication_files <- raw_replication_file(seq_len(m))
+missing_replication_files <- replication_files[!file.exists(replication_files)]
+if (length(missing_replication_files)) {
+  stop(sprintf("Missing expected scratch simulation file: %s", missing_replication_files[1]), call. = FALSE)
+}
+
+raw_specs <- make_raw_result_specs()
+message(sprintf("Consolidating %d scratch replication file(s) into %d raw CSV file(s)", length(replication_files), nrow(raw_specs)))
+consolidate_raw_results(replication_files, raw_specs)
+
+expected_raw <- basename(raw_result_file(raw_specs$dgp, raw_specs$design, raw_specs$method, raw_specs$tag, raw_specs$suffix))
 missing_raw <- expected_raw[!file.exists(file.path(output_dir, expected_raw))]
 if (length(missing_raw)) stop(sprintf("Missing expected raw simulation file: %s", missing_raw[1]), call. = FALSE)
 
