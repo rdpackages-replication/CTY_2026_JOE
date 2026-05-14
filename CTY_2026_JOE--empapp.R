@@ -1,29 +1,79 @@
-
-# rd2d: illustration file
-# Authors: M. D. Cattaneo, R. Titiunik, R. R. Yu
-
+################################################################################################
+# Estimation and Inference in Boundary Discontinuity Designs: Distance-Based Methods
+# Empirical Application: SPP Data
+# Replication output
+################################################################################################
 rm(list=ls(all=TRUE))
 
-library(MASS)
-library(ggplot2)
-library(rdrobust)
-library(latex2exp)
-library(tidyr)
-library(dplyr)
-library(haven)
-library(xtable)
-library(expm)
-library(rdrobust)
-library(grid)
+get_script_dir <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", args, value = TRUE)
+  if (length(file_arg) > 0) {
+    return(dirname(normalizePath(sub("^--file=", "", file_arg[1]))))
+  }
+  if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+    active <- rstudioapi::getActiveDocumentContext()$path
+    if (nzchar(active)) return(dirname(normalizePath(active)))
+  }
+  getwd()
+}
+setwd(get_script_dir())
+
+suppressPackageStartupMessages(library(rdrobust))
+
+output_dir <- "output"
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+get_env_int <- function(name, default) {
+  value <- Sys.getenv(name, unset = "")
+  if (!nzchar(value)) return(default)
+  as.integer(value)
+}
+emp_repp <- get_env_int("RD2D_EMP_REPP", 5000)
 library(rd2d)
 
 ################################## Load Data ###################################
 
-data <- read.csv("spp.csv")
-data$X <- NULL
-colnames(data) <- c("x.1", "x.2","y","d")
-na.ok <- complete.cases(data$x.1) & complete.cases(data$x.2)
-data <- data[na.ok,]
+# Load the SPP dataset using the JASA replication data schema.
+
+load_spp_data <- function(path = "spp.csv") {
+  raw <- read.csv(path)
+  expected <- c(
+    "running_saber11",
+    "running_sisben",
+    "eligible_spp",
+    "beneficiary_spp",
+    "spadies_any",
+    "icfes_educm1"
+  )
+  missing_cols <- setdiff(expected, names(raw))
+  if (length(missing_cols) > 0) {
+    stop(
+      "spp.csv is missing required columns: ",
+      paste(missing_cols, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  dat <- raw[, c(
+    "running_saber11", "running_sisben", "spadies_any",
+    "eligible_spp", "beneficiary_spp"
+  )]
+  names(dat) <- c("x.1", "x.2", "y", "d", "w")
+  dat <- dat[complete.cases(dat), , drop = FALSE]
+
+  expected_assignment <- as.integer(dat$x.1 >= 0 & dat$x.2 >= 0)
+  if (!all(dat$d == expected_assignment)) {
+    stop("eligible_spp does not match the quadrant assignment rule.", call. = FALSE)
+  }
+
+  dat$y <- as.numeric(dat$y)
+  dat$d <- as.numeric(dat$d)
+  dat$w <- as.numeric(dat$w)
+  dat
+}
+
+data <- load_spp_data("spp.csv")
 
 neval <- 40
 eval <- matrix(nrow = neval, ncol = 2)
@@ -39,185 +89,7 @@ colnames(eval) <- c("x.1", "x.2")
 # subsetting so the kink (0, 0) is the 11th retained boundary point
 eval <- eval[c(11:31),]
 neval <- 21
-
-dist_to_kink <- rep(0, neval)
-for (i in 1:neval){
-  dist_to_kink[i] <- sqrt(eval[i,1]^2 + eval[i,2]^2)
-}
-
-########################### Kink Adaptive Bandwidth ############################
-
-adaptive_bandwidth <- function(h_smooth, h_kink, dist_to_kink){
-  out <- pmax(pmin(h_smooth, dist_to_kink), h_kink)
-  return(out)
-}
-
-################################################################################
-### FIGURE 1: Scatter plot score and RDPLOTs
-################################################################################
-
-## Scatter Plot and Boundary
-
-eval_labeled <- eval %>%
-  mutate(
-    index = row_number(),
-    label = as.list(if_else(
-      index %in% c(4, 7, 10, 15, 18),
-      paste0("$\\textbf{b}_{", index, "}$"),  # e.g. "$x_{10}$"
-      NA_character_
-    ))
-  )
-
-
-bound <- 21
-point_1 <- eval[1,]
-x_1 <- point_1$x.1
-y_1 <- point_1$x.2
-
-# point_11 <- eval[11,]
-# x_11 <- point_11$x.1
-# y_11 <- point_11$x.2
-
-point_11 <- eval[11,]
-x_11 <- point_11$x.1
-y_11 <- point_11$x.2
-
-point_21 <- eval[21,]
-x_21 <- point_21$x.1
-y_21 <- point_21$x.2
-
-p1.1 <- ggplot() +
-  geom_point(
-    data = data  %>% sample_frac(0.3),
-    aes(x = x.1, y = x.2, color = factor(d)),
-    alpha = 0.5, size = 0.5
-  ) +
-  geom_segment(aes(x = 0, xend = 0, y = 0, yend = 60),
-               linetype = "solid", color = "grey", alpha = 1, size = 3) +
-  geom_segment(aes(x = 0, xend = 100, y = 0, yend = 0),
-               linetype = "solid", color = "grey", alpha = 1, size = 3) +
-  
-  geom_point(
-    data = eval_labeled,
-    aes(x = x.1, y = x.2),  # Map color to factor(d)
-    alpha = 1,
-    size = 0.5
-  ) +
-  
-  # Use scale_color_manual to define your own colors for d=0 and d=1
-  scale_color_manual(
-    name = NULL,  # Legend title (optional)
-    values = c("0" = "#619CFF",  # Color for d=0
-               "1" = "#F8766D"), # Color for d=1
-    labels = c("0" = "Control", "1" = "Treatment")
-  )
-
-annotation_data <- eval_labeled %>%
-  filter(!is.na(label))
-
-
-for(i in seq_len(nrow(annotation_data))) {
-  if (i <= 3){
-    hjust <- -0.3
-    vjust <- 0
-  } else {
-    hjust <- 0.2
-    vjust <- 1.5
-  }
-  p1.1 <- p1.1 + annotate("text",
-                          x = annotation_data$x.1[i],
-                          y = annotation_data$x.2[i],
-                          label = TeX(as.character(annotation_data$label[i])),
-                          hjust = hjust,
-                          vjust = vjust,
-                          size = 4,
-                          color = "black",
-                          fontface = "bold")}
-
-# Arrow pointing to point 21
-p1.1 <- p1.1 +  geom_segment(
-  aes(x = x_11 - 8, y = y_11 - 8, xend = x_11, yend = y_11),
-  arrow = arrow(length = unit(0.2, "cm")),
-  color = "black",
-  size = 1
-) +
-  
-  # Label next to the arrow
-  annotate(
-    "text",
-    x = x_11 - 10,
-    y = y_11 - 12,
-    label = TeX("$\\textbf{b}_{11}$"),
-    color = "black",
-    size = 6,
-    fontface = "bold"
-  ) +
-  
-  annotate(
-    "text",
-    x = eval$x.1[40] + 10,
-    y = eval$x.2[40] - 5,
-    label = "Boundary",
-    color = "black",
-    size = 6,
-    fontface = "bold"
-  ) +
-  
-  labs(x = "Saber 11 Score", y = "Sisben Score") +
-  coord_cartesian(xlim = c(-80, 100), ylim = c(-40, 60)) +
-  theme_minimal() +
-  theme(
-    axis.title.x = element_text(size = 15),
-    axis.title.y = element_text(size = 15),
-    plot.title   = element_text(size = 20, hjust = 0.5),
-    text = element_text(family = "serif", face = "bold"),
-    axis.text.x  = element_text(face = "bold", size = 12),
-    axis.text.y  = element_text(face = "bold", size = 12),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    legend.position = c(0.2, 0.8),
-    legend.background = element_rect(fill = "white", color = "black", linetype = "solid")
-  ) +
-  xlab("Saber 11") +
-  ylab("Sisben")
-
-# --- arrow to b10: start from NW of the point, label at the tail ---
-x0_1 <- x_1 - 8
-y0_1 <- y_1 + 0
-p1.1 <- p1.1 +
-  geom_segment(
-    aes(x = x0_1, y = y0_1, xend = x_1, yend = y_1),
-    arrow = arrow(length = unit(0.2, "cm")),
-    color = "black", size = 1
-  ) +
-  annotate(
-    "text",
-    x = x0_1 - 2, y = y0_1,               # near the arrow tail
-    label = latex2exp::TeX("$\\textbf{b}_{1}$"),
-    color = "black", size = 6, fontface = "bold",
-    hjust = 1, vjust = 0
-  )
-
-# --- arrow to b30: start from NE of the point, label at the tail ---
-x0_21 <- x_21 + 0
-y0_21 <- y_21 - 8
-p1.1 <- p1.1 +
-  geom_segment(
-    aes(x = x0_21, y = y0_21, xend = x_21, yend = y_21),
-    arrow = arrow(length = unit(0.2, "cm")),
-    color = "black", size = 1
-  ) +
-  annotate(
-    "text",
-    x = x0_21, y = y_21 - 15,               # near the arrow tail
-    label = latex2exp::TeX("$\\textbf{b}_{21}$"),
-    color = "black", size = 6, fontface = "bold",
-    hjust = 0, vjust = 0
-  )
-
-print(p1.1)
-
-ggsave("figures/fig2-a.png", p1.1, width = 6, height = 5)
+kink.position <- 11
 
 ################################ Scale Data ####################################
 
@@ -237,420 +109,191 @@ if (scale){
 ############################# SPP: Using Distance Method #######################
 
 Y <- data$y
+fuzzy <- data$w
 X <- cbind(data$x.1, data$x.2)
-t <- data$d
+assignment <- data$d
 b <- eval
 
-D <- proxy::dist(X, eval, method = "euclidean")  # Use "euclidean" for Euclidean distances
-t_expanded <- matrix(rep(2 * t - 1, times = ncol(D)), nrow = nrow(D), ncol = ncol(D))
-D <- D * t_expanded
+distance <- proxy::dist(X, eval, method = "euclidean")
+assignment_expanded <- matrix(rep(2 * assignment - 1, times = ncol(distance)), nrow = nrow(distance), ncol = ncol(distance))
+distance <- distance * assignment_expanded
+
+fuzzy_params_cov <- c("main", "itt", "fs")
+
+# The sharp fits reproduce the old empirical application. They also provide
+# the ITT bandwidths used below, so fuzzy$itt is directly comparable to the
+# previous sharp main estimates.
 
 # smooth boundary
-result.kinkoff <- rd2d.dist(Y, D, kink = "off", repp = 5000, vce = "hc1")
-out.kinkoff <- cbind(result.kinkoff$results$h0, result.kinkoff$results$Est.p,
-                     result.kinkoff$results$CI.lower, result.kinkoff$results$CI.upper,
-                     result.kinkoff$results$CB.lower, result.kinkoff$results$CB.upper,
-                     result.kinkoff$results$Est.q, result.kinkoff$results$z, result.kinkoff$results$`P>|z|`)
+result.itt.kinkoff <- rd2d.distance(Y, distance = distance, b = b, repp = emp_repp, vce = "hc1")
+result.kinkoff <- rd2d.distance(
+  Y, distance = distance, b = b, repp = emp_repp, vce = "hc1",
+  fuzzy = fuzzy, bwparam = "itt", params.cov = fuzzy_params_cov
+)
 
 # unknown kink location
-result.kinkon <- rd2d.dist(Y, D, kink = "on", repp = 5000, vce = "hc1", rbc = "off")
-out.kinkon <- cbind(result.kinkon$results$h0, result.kinkon$results$Est.p,
-                    result.kinkon$results$CI.lower, result.kinkon$results$CI.upper,
-                    result.kinkon$results$CB.lower, result.kinkon$results$CB.upper,
-                    result.kinkon$results$Est.q, result.kinkon$results$z, result.kinkon$results$`P>|z|`)
+result.itt.kinkon <- rd2d.distance(
+  Y, distance = distance, b = b, kink.unknown = c(TRUE, FALSE),
+  repp = emp_repp, vce = "hc1"
+)
+result.kinkon <- rd2d.distance(
+  Y, distance = distance, b = b, kink.unknown = c(TRUE, FALSE),
+  repp = emp_repp, vce = "hc1",
+  fuzzy = fuzzy, bwparam = "itt", params.cov = fuzzy_params_cov
+)
 
 # adaptive
-h.adaptive <- adaptive_bandwidth(result.kinkoff$results$h0,
-                                 result.kinkon$results$h0,
-                                 dist_to_kink)
-h.adaptive <- cbind(h.adaptive, h.adaptive)
-result.adaptive <- rd2d.dist(Y, D, kink = "off", repp = 5000, vce = "hc1", h = h.adaptive)
-out.adaptive <- cbind(result.adaptive$results$h0, result.adaptive$results$Est.p,
-                      result.adaptive$results$CI.lower, result.adaptive$results$CI.upper,
-                      result.adaptive$results$CB.lower, result.adaptive$results$CB.upper,
-                      result.adaptive$results$Est.q, result.adaptive$results$z, result.adaptive$results$`P>|z|`)
+result.itt.adaptive <- rd2d.distance(
+  Y, distance = distance, b = b, kink.position = kink.position,
+  repp = emp_repp, vce = "hc1"
+)
+result.adaptive <- rd2d.distance(
+  Y, distance = distance, b = b, kink.position = kink.position,
+  repp = emp_repp, vce = "hc1",
+  fuzzy = fuzzy, bwparam = "itt", params.cov = fuzzy_params_cov
+)
 
 # rdrobust
 bws <- matrix(0, nrow = neval, ncol = 2)
 for (i in 1:neval) {
-  out <- rdbwselect(Y, D[, i], vce = "hc1")
+  out <- rdbwselect(Y, distance[, i], vce = "hc1")
   bws[i, 1] <- out$bws[1]
   bws[i, 2] <- out$bws[2]
 }
-result.rdrobust <- rd2d.dist(Y, D, h = bws, kink = "off", repp = 5000, vce = "hc1")
-out.rdrobust <- cbind(result.rdrobust$results$h0, result.rdrobust$results$Est.p,
-                      result.rdrobust$results$CI.lower, result.rdrobust$results$CI.upper,
-                      result.rdrobust$results$CB.lower, result.rdrobust$results$CB.upper,
-                      result.rdrobust$results$Est.q, result.rdrobust$results$z, result.rdrobust$results$`P>|z|`)
-
-
-################################################################################
-### TABLE 6: BATEC Estimation and Inference (SPP Empirical Application)
-################################################################################
-
-
-dir.create("Results", showWarnings = FALSE)
-
-library(xtable)
-
-out_list <- list(
-  smooth       = out.kinkoff,
-  adaptive     = out.adaptive,
-  unknown_kink = out.kinkon,
-  rdrobust     = out.rdrobust
+result.itt.rdrobust <- rd2d.distance(Y, distance = distance, h = bws, b = b, repp = emp_repp, vce = "hc1")
+result.rdrobust <- rd2d.distance(
+  Y, distance = distance, h = bws, b = b, repp = emp_repp, vce = "hc1",
+  fuzzy = fuzzy, bwparam = "itt", params.cov = fuzzy_params_cov
 )
 
-keep_idx <- 1:neval
+################################ Consistency Checks ############################
 
-fmt_ci  <- function(lo, hi) sprintf("$(%.3f,\\, %.3f)$", lo, hi)
-fmt_tau <- function(j) sprintf("$\\mathbf{b}_{%d}$", j)
-
-for (nm in names(out_list)) {
-  
-  out <- out_list[[nm]]
-  
-  tab <- data.frame(
-    bb    = vapply(keep_idx, fmt_tau, character(1)),
-    h     = out[keep_idx, 1],
-    tau   = out[keep_idx, 2],
-    pval  = out[keep_idx, 9],
-    ci    = mapply(fmt_ci, out[keep_idx, 3], out[keep_idx, 4]),
-    check.names = FALSE,
-    stringsAsFactors = FALSE
+check_itt_match <- function(sharp, fuzzy, label, tol = 1e-10) {
+  cols <- c(
+    "estimate.p", "std.err.p", "estimate.q", "std.err.q",
+    "t.value", "p.value", "ci.lower", "ci.upper",
+    "h0", "h1", "h0.rbc", "h1.rbc", "N.Co", "N.Tr"
   )
-  
-  xt <- xtable(
-    tab,
-    digits = c(0, 0, 3, 3, 3, 0),
-    align  = c("l", "c", "r", "r", "r", "c")
-  )
-  
-  lines <- c(
-    "\\begin{tabular}{@{}crrrc@{}}",
-    "\\toprule\\toprule",
-    "\\multicolumn{1}{c}{$\\bb\\in\\B$} & \\multicolumn{1}{c}{$h$} & \\multicolumn{1}{c}{$\\tau(\\bb)$} & \\multicolumn{1}{c}{p-value} & \\multicolumn{1}{c}{95\\% RBC CI} \\\\",
-    "\\midrule"
-  )
-  
-  body <- print(
-    xt,
-    type = "latex",
-    include.rownames = FALSE,
-    include.colnames = FALSE,
-    sanitize.text.function = identity,
-    hline.after = NULL,
-    comment = FALSE,
-    only.contents = TRUE,
-    print.results = FALSE
-  )
-  
-  lines <- c(
-    lines,
-    body,
-    "\\bottomrule\\bottomrule",
-    "\\end{tabular}"
-  )
-  
-  writeLines(lines, sprintf("tables/tab-empapp_%s.tex", nm))
-}
-
-################################################################################
-### FIGURE 4: BATEC Estimation and Inference (SPP Empirical Application)
-################################################################################
-
-plot_rd2d_method <- function(out,
-                             method_name,
-                             show_idx = c(1, 5, 9, 11, 13, 17, 21),
-                             kink_index = 11,
-                             kink_x_text = 10,
-                             kink_y = 0.05,
-                             ylim = c(0.05, 0.55),
-                             save_path = NULL) {
-  
-  indx <- 1:nrow(out)
-  
-  df <- data.frame(
-    indx  = indx,
-    y     = out[, 2],
-    label = "BATEC"
-  )
-  
-  df_ribbon <- data.frame(
-    indx  = indx,
-    ymin  = out[, 5],
-    ymax  = out[, 6],
-    label = "CB"
-  )
-  
-  df_errorbar <- data.frame(
-    indx  = indx,
-    ymin  = out[, 3],
-    ymax  = out[, 4],
-    label = "CI"
-  )
-  
-  temp_plot <- ggplot() + theme_bw()
-  
-  ## point estimates
-  temp_plot <- temp_plot +
-    geom_point(
-      data = df,
-      aes(x = indx, y = y,
-          color = label, shape = label, fill = label, linetype = label)
+  diffs <- vapply(cols, function(col) {
+    max(abs(sharp$main[[col]] - fuzzy$itt[[col]]), na.rm = TRUE)
+  }, numeric(1))
+  if (any(diffs > tol)) {
+    stop(
+      sprintf(
+        "fuzzy itt does not match old sharp main for %s. Max diff: %s = %.3e",
+        label, names(which.max(diffs)), max(diffs)
+      ),
+      call. = FALSE
     )
-  
-  ## confidence band
-  temp_plot <- temp_plot +
-    geom_ribbon(
-      data = df_ribbon,
-      aes(x = indx, ymin = ymin, ymax = ymax,
-          color = label, fill = label, linetype = label),
-      alpha = 0.1
-    )
-  
-  ## confidence interval
-  temp_plot <- temp_plot +
-    geom_errorbar(
-      data = df_errorbar,
-      aes(x = indx, ymin = ymin, ymax = ymax,
-          color = label, shape = label, fill = label, linetype = label)
-    )
-  
-  temp_plot <- temp_plot +
-    xlab("Cutoffs on the Boundary") +
-    ylab("Treatment Effect") 
-  
-  legend_order <- c("BATEC", "CI", "CB")
-  
-  temp_plot <- temp_plot +
-    scale_color_manual(
-      values = c("BATEC" = "black", "CI" = "black", "CB" = "dodgerblue4"),
-      name = NULL,
-      breaks = legend_order
-    ) +
-    scale_shape_manual(
-      values = c("BATEC" = 16, "CI" = 124, "CB" = 0),
-      name = NULL,
-      breaks = legend_order
-    ) +
-    scale_fill_manual(
-      values = c("BATEC" = NA, "CI" = NA, "CB" = "dodgerblue4"),
-      name = NULL,
-      breaks = legend_order
-    ) +
-    scale_linetype_manual(
-      values = c("BATEC" = 0, "CI" = 5, "CB" = 0),
-      name = NULL,
-      breaks = legend_order
-    ) +
-    guides(
-      shape = "none",
-      fill = "none",
-      linetype = "none",
-      color = guide_legend(
-        order = 1,
-        override.aes = list(
-          shape    = c(16, NA, 22),
-          linetype = c(0, 5, 0),
-          fill     = c(NA, NA, "dodgerblue4"),
-          alpha    = c(1, 1, 0.1),
-          size     = c(2.5, 1, 5)
-        )
+  }
+  if (!is.null(sharp$params.cov$main) && !is.null(fuzzy$params.cov$itt)) {
+    cov_diff <- max(abs(sharp$params.cov$main - fuzzy$params.cov$itt), na.rm = TRUE)
+    if (cov_diff > tol) {
+      stop(
+        sprintf(
+          "fuzzy itt covariance does not match old sharp main for %s. Max diff: %.3e",
+          label, cov_diff
+        ),
+        call. = FALSE
       )
-    )
-  
-  temp_plot <- temp_plot +
-    geom_vline(
-      xintercept = kink_index,
-      color = "lightgrey",
-      size = 1,
-      linetype = "dotted"
-    )
-  
-  temp_plot <- temp_plot +
-    theme_minimal() +
-    theme(
-      axis.title.x = element_text(size = 15, face = "bold"),
-      axis.title.y = element_text(size = 15, face = "bold"),
-      plot.title   = element_text(size = 20, hjust = 0.5),
-      text         = element_text(family = "serif", face = "bold"),
-      axis.text.x  = element_text(face = "bold", size = 15),
-      axis.text.y  = element_text(face = "bold", size = 12),
-      legend.position = c(0.8, 1),
-      legend.justification = c(0, 1),
-      legend.background = element_rect(fill = "white", colour = NA),
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank()
-    )
-  
-  temp_plot <- temp_plot +
-    scale_x_continuous(
-      breaks = show_idx,
-      labels = TeX(paste0("$\\textbf{b}_{", show_idx, "}$"))
-    )
-  
-  temp_plot <- temp_plot +
-    coord_cartesian(xlim = c(1, neval), ylim = ylim)
-  
-  print(temp_plot)
-  
-  if (!is.null(save_path)) {
-    ggsave(save_path, temp_plot, width = 6, height = 5)
+    }
   }
-  
-  invisible(temp_plot)
+  invisible(TRUE)
 }
 
-################################## Produce Four Plots ##################################
-
-show_idx <- c(1, 4, 7, 11, 14, 17, 21)
-
-p_smooth <- plot_rd2d_method(
-  out = out.kinkoff,
-  method_name = "Smooth Boundary",
-  show_idx = show_idx,
-  kink_index = 11,
-  kink_x_text = 11,
-  kink_y = -0.3,
-  ylim = c(-0.3, 0.8),
-  save_path = "figures/fig4-smooth.png"
+sharp_results <- list(
+  smooth = result.itt.kinkoff,
+  adaptive = result.itt.adaptive,
+  unknown_kink = result.itt.kinkon,
+  rdrobust = result.itt.rdrobust
 )
 
-p_adaptive <- plot_rd2d_method(
-  out = out.adaptive,
-  method_name = "Adaptive",
-  show_idx = show_idx,
-  kink_index = 11,
-  kink_x_text = 11,
-  kink_y = -0.3,
-  ylim = c(-0.3, 0.8),
-  save_path = "figures/fig4-adaptive.png"
+fuzzy_results <- list(
+  smooth = result.kinkoff,
+  adaptive = result.adaptive,
+  unknown_kink = result.kinkon,
+  rdrobust = result.rdrobust
 )
 
-p_kinkon <- plot_rd2d_method(
-  out = out.kinkon,
-  method_name = "Unknown Kink Location",
-  show_idx = show_idx,
-  kink_index = 11,
-  kink_x_text = 11,
-  kink_y = -0.3,
-  ylim = c(-0.3, 0.8),
-  save_path = "figures/fig4-unknown_kink.png"
-)
+for (nm in names(fuzzy_results)) {
+  check_itt_match(sharp_results[[nm]], fuzzy_results[[nm]], nm)
+}
 
-p_rdrobust <- plot_rd2d_method(
-  out = out.rdrobust,
-  method_name = "Rdrobust",
-  show_idx = show_idx,
-  kink_index = 11,
-  kink_x_text = 11,
-  kink_y = -0.3,
-  ylim = c(-0.3, 0.8),
-  save_path = "figures/fig4-rdrobust.png"
-)
+################################## Output ######################################
 
-################################################################################
-### FIGURE 2: (b)-(d)
-################################################################################
+as_result_table <- function(result, eval, output = c("main", "itt", "fs")) {
+  output <- match.arg(output)
+  point_res <- result[[output]]
+  n <- nrow(point_res)
+  aggregate_labels <- c("WBATE", "LBATE")
 
-for (element in c(1:3)){
-  idx <- c(1,11,21)[element]
+  invisible(capture.output(
+    summ <- summary(
+      result,
+      output = output,
+      cbands = output,
+      WBATE = rep(1, n),
+      LBATE = TRUE
+    )
+  ))
 
-  h <- result.kinkoff$results$h0[idx]
-  hnumber <- idx
-  
-  ## 1) Run rdplot and extract bin means + smooth curves
-  rdout <- rdplot(Y, D[,idx], nbins = c(500,500), p = 3)
-  
-  databins <- rdout$vars_bins %>%
-    rename(x = rdplot_mean_x, y = rdplot_mean_y) %>%
-    arrange(x)
-  
-  datapoly <- rdout$vars_poly %>%
-    rename(x = rdplot_x, y = rdplot_y) %>%
-    arrange(x)
-  
-  ## 2) Choose a symmetric bandwidth h (or keep your existing h)
-  if (!exists("h")) {
-    bw <- rdrobust(Y, D[,idx], p = 3)$bws  # c(h_left, h_right, ...)
-    h  <- min(bw[1], bw[2], na.rm = TRUE) # symmetric choice
+  tab <- summ$tables[[output]]
+  if (!is.data.frame(tab)) {
+    stop(sprintf("summary.rd2d.distance did not return a %s summary table.", output), call. = FALSE)
   }
-  hnumber <- if (!exists("hnumber")) 1 else hnumber  # label like h_1 if you use it
-  
-  ## 3) Mark bins inside/outside the band
-  databins <- databins %>%
-    mutate(in_band = abs(x) <= h)
-  
-  ## 4) Colors/linetypes to match your scheme
-  col_points_inside    <- "purple"
-  col_points_outside   <- "grey"
-  col_boundary_band    <- "purple"
-  linety_boundary_band <- "solid"
-  linewd_boundary_band <- 0.8
-  
-  ## 5) Build the plot (conditional means + smooth + band markers)
-  plot <- ggplot() +
-    # conditional means (colored by band)
-    geom_point(data = databins,
-               aes(x = x, y = y, color = in_band),
-               alpha = 0.9, size = 1) +
-    
-    # regression curves (left/right, leave a tiny gap at 0 if you like)
-    geom_path(data = subset(datapoly, x <= -0.01), aes(x = x, y = y),
-              color = "black", linewidth = 1.1) +
-    geom_path(data = subset(datapoly, x >=  0.01), aes(x = x, y = y),
-              color = "black", linewidth = 1.1) +
-    
-    # band edges and cutoff
-    geom_vline(xintercept =  h, color = col_boundary_band,
-               linetype = linety_boundary_band, linewidth = linewd_boundary_band) +
-    geom_vline(xintercept = -h, color = col_boundary_band,
-               linetype = linety_boundary_band, linewidth = linewd_boundary_band) +
-    geom_vline(xintercept =  0, color = "black", linetype = "dashed",
-               linewidth = linewd_boundary_band) +
-    
-    # label the two halves of the band
-    annotate("segment", x = -h, y = 0.90, xend =  0, yend = 0.90,
-             arrow = arrow(length = unit(0.3, "cm"), ends = "both"),
-             color = "black", linewidth = 1.2) +
-    annotate("segment", x =  0, y = 0.90, xend =  h, yend = 0.90,
-             arrow = arrow(length = unit(0.3, "cm"), ends = "both"),
-             color = "black", linewidth = 1.2) +
-    annotate("text", x = -h/2, y = 0.952, label = latex2exp::TeX(paste0("$\\hat{h}_{\\textbf{b}_{", hnumber, "}}$")),
-             size = 6, fontface = "bold") +
-    annotate("text", x =  h/2, y = 0.952, label = latex2exp::TeX(paste0("$\\hat{h}_{\\textbf{b}_{", hnumber, "}}$")),
-             size = 6, fontface = "bold") +
-    
-    # legend mapping for inside/outside
-    scale_color_manual(
-      values = c(`TRUE` = col_points_inside, `FALSE` = col_points_outside),
-      labels = c(`TRUE` = "Inside [-h, h]", `FALSE` = "Outside band"),
-      name   = NULL
-    ) +
-    
-    # axes, limits, theme
-    coord_cartesian(xlim = c(-100, 100), ylim = c(0, 1)) +
-    theme_minimal() +
-    theme(
-      axis.title.x = element_text(size = 15),
-      axis.title.y = element_text(size = 15),
-      plot.title   = element_text(size = 20, hjust = 0.5),
-      text         = element_text(family = "serif", face = "bold"),
-      axis.text.x  = element_text(face = "bold", size = 12),
-      axis.text.y  = element_text(face = "bold", size = 12),
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      legend.position = "none"
-    ) +
-    xlab(latex2exp::TeX(sprintf("Distance to Boundary Point $\\textbf{b}_{%d}$", idx))) +
-    ylab("College Enrollment")
-  
-  print(plot)
-  suffix <- c("b", "c", "d")
-  
-  ggsave(
-    paste0("figures/fig2-", suffix[element], ".png"),
-    plot,
-    width = 6, height = 5
+  point_rows <- !(rownames(tab) %in% aggregate_labels)
+  if (!identical(sum(point_rows), n)) {
+    stop("summary.rd2d.distance returned an unexpected number of point rows.", call. = FALSE)
+  }
+
+  cbands <- summ$cbands[[output]]
+  if (!is.data.frame(cbands) || !identical(nrow(cbands), n)) {
+    stop(sprintf("summary.rd2d.distance did not return %s confidence bands.", output), call. = FALSE)
+  }
+
+  col_or_na <- function(name) {
+    if (name %in% names(tab)) return(tab[[name]])
+    rep(NA_real_, nrow(tab))
+  }
+
+  data.frame(
+    row = rownames(tab),
+    b1 = c(eval$x.1, rep(NA_real_, sum(!point_rows))),
+    b2 = c(eval$x.2, rep(NA_real_, sum(!point_rows))),
+    h0 = col_or_na("h0"),
+    h1 = col_or_na("h1"),
+    N.Co = col_or_na("N.Co"),
+    N.Tr = col_or_na("N.Tr"),
+    estimate.p = col_or_na("estimate.p"),
+    ci.lower = col_or_na("ci.lower"),
+    ci.upper = col_or_na("ci.upper"),
+    cb.lower = col_or_na("cb.lower"),
+    cb.upper = col_or_na("cb.upper"),
+    estimate.q = col_or_na("estimate.q"),
+    t.value = col_or_na("t.value"),
+    p.value = col_or_na("p.value"),
+    check.names = FALSE
   )
 }
+
+write_output_csv <- function(x, file) {
+  write.csv(x, file.path(output_dir, file), row.names = FALSE, na = "")
+}
+
+old_files <- list.files(output_dir, pattern = "^empapp_.*[.]csv$", full.names = TRUE)
+if (length(old_files) > 0) unlink(old_files)
+
+outputs <- c(fuzzy = "main", itt = "itt", fs = "fs")
+for (nm in names(fuzzy_results)) {
+  for (output_name in names(outputs)) {
+    write_output_csv(
+      as_result_table(fuzzy_results[[nm]], eval, output = outputs[[output_name]]),
+      paste0("empapp_", nm, "_", output_name, ".csv")
+    )
+  }
+}
+
+cat(sprintf(
+  "Wrote %d empirical output file(s) to %s. Sharp-main/old ITT checks passed.\n",
+  length(fuzzy_results) * length(outputs), output_dir
+))
