@@ -5,7 +5,7 @@ Inference in Boundary Discontinuity Designs: Distance-Based Methods."
 
 This repository contains the empirical application and simulation scripts for
 the distance-based boundary discontinuity design analysis. The computations use
-the R package [`rd2d`](https://cran.r-project.org/package=rd2d).
+the `rd2d` package for R and Python.
 
 ## Website
 
@@ -31,8 +31,14 @@ The analysis dataset is [`spp.csv`](spp.csv). The scripts expect these columns:
 
 ## Repository Layout
 
-- [`CTY_2026_JOE--empapp.R`](CTY_2026_JOE--empapp.R): runs the empirical
+- [`CTY_2026_JOE--empapp.R`](CTY_2026_JOE--empapp.R): runs the R empirical
   application and writes CSV outputs to `output/`.
+- [`CTY_2026_JOE--empapp.py`](CTY_2026_JOE--empapp.py): runs the Python
+  empirical application and writes CSV outputs to `output/`.
+- [`CTY_2026_JOE--empapp_tables.py`](CTY_2026_JOE--empapp_tables.py): converts
+  Python empirical CSV outputs into LaTeX table fragments in `tables/`.
+- [`CTY_2026_JOE--empapp_figures.py`](CTY_2026_JOE--empapp_figures.py):
+  converts Python empirical CSV outputs into figures in `figures/`.
 - [`CTY_2026_JOE--empapp_tables.R`](CTY_2026_JOE--empapp_tables.R): converts
   empirical CSV outputs into LaTeX table fragments in `tables/`.
 - [`CTY_2026_JOE--empapp_figures.R`](CTY_2026_JOE--empapp_figures.R):
@@ -57,23 +63,38 @@ These generated folders are intentionally ignored by Git.
 
 ## Requirements
 
-The scripts are written for R and require `rd2d` version 0.1.0 or newer, with
-support for `params.other`, `params.cov`, and `summary(..., cbands = ...)`.
-Install the released package from CRAN before running the replication scripts:
+The R scripts require `rd2d` version 0.1.0 or newer, with support for
+`params.other`, `params.cov`, and `summary(..., cbands = ...)`. Install the
+released R package from CRAN before running the R replication scripts:
 
 ```r
 install.packages("rd2d")
 library(rd2d)
 ```
 
+The Python empirical script requires Python 3.10 or newer and the Python `rd2d`
+package with replication dependencies:
+
+```sh
+python -m pip install "rd2d[replication]"
+```
+
 ## Replication
 
-To replicate the empirical application:
+To replicate the empirical application with R:
 
 ```sh
 Rscript CTY_2026_JOE--empapp.R
 Rscript CTY_2026_JOE--empapp_tables.R
 Rscript CTY_2026_JOE--empapp_figures.R
+```
+
+To replicate the empirical application with Python:
+
+```sh
+python CTY_2026_JOE--empapp.py
+python CTY_2026_JOE--empapp_tables.py
+python CTY_2026_JOE--empapp_figures.py
 ```
 
 To replicate the simulation study:
@@ -95,7 +116,7 @@ can be used for smaller local checks:
 - `RD2D_REPP`: simulation repetitions for critical values, default `2000`
 - `RD2D_SEED`: simulation seed, default `20260510`
 - `RD2D_WORKERS`: parallel workers, default based on available cores
-- `RD2D_EMP_REPP`: empirical critical-value repetitions, default `5000`
+- `RD2D_EMP_REPP`: empirical critical-value repetitions, default `5000`; used by both the R and Python empirical scripts
 
 Example quick simulation smoke run:
 
@@ -136,3 +157,4 @@ grants [SES-2019432](https://www.nsf.gov/awardsearch/showAward?AWD_ID=2019432),
 [SES-2342226](https://www.nsf.gov/awardsearch/showAward?AWD_ID=2342226), and by
 the National Institute for Food and Agriculture through grant
 [2024-67023-42704](https://www.nifa.usda.gov/data).
+
